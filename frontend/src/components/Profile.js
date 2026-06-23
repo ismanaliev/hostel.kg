@@ -9,7 +9,7 @@ function Profile({ token, user, setUser }) {
   const [editForm, setEditForm] = useState({
     first_name: '',
     last_name: '',
-    phone: '',
+    phone_number: '',
     email: ''
   });
 
@@ -32,7 +32,7 @@ function Profile({ token, user, setUser }) {
         setEditForm({
           first_name: data.first_name || '',
           last_name: data.last_name || '',
-          phone: data.phone || '',
+          phone_number: data.phone_number || '',
           email: data.email || ''
         });
       } else {
@@ -141,16 +141,8 @@ function Profile({ token, user, setUser }) {
             <label>Phone:</label>
             <input
               type="tel"
-              value={editForm.phone}
-              onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-            />
-          </div>
-          <div className="form-group">
-            <label>Email:</label>
-            <input
-              type="email"
-              value={editForm.email}
-              onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+              value={editForm.phone_number}
+              onChange={(e) => setEditForm({ ...editForm, phone_number: e.target.value })}
             />
           </div>
           <div className="form-actions">
@@ -188,7 +180,7 @@ function Profile({ token, user, setUser }) {
           </div>
           <div className="info-item">
             <label>Phone:</label>
-            <span>{profile.phone || 'Not set'}</span>
+            <span>{profile.phone_number || 'Not set'}</span>
           </div>
           <div className="info-item">
             <label>Email:</label>

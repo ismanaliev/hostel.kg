@@ -20,3 +20,32 @@ This repository contains a Django backend and a React frontend for a hostel mana
 
 - The React app is proxied to the backend on `http://localhost:8000`.
 - Secret keys and environment variables should be stored in `demo/.env`.
+
+## Telegram webhook
+
+Use ngrok for a stable public endpoint and dynamic host support.
+
+Start the backend in one terminal:
+
+```powershell
+cd C:\Users\user\hostel.kg\backend
+python manage.py runserver 8000
+```
+
+Then start ngrok in another terminal:
+
+```powershell
+ngrok http 8000
+```
+
+ngrok will print a public HTTPS URL like `https://abcd-1234.ngrok.io`.
+
+Register the webhook with that URL:
+
+```powershell
+curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook?url=https://abcd-1234.ngrok.io/api/integrations/webhook/telegram/"
+```
+
+If the ngrok URL changes, re-run the webhook registration with the new URL.
+
+Do not put the bot token or port in `backend/integrations/urls.py`; the URL is only used when registering the webhook.
