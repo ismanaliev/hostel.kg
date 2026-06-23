@@ -4,8 +4,7 @@ This repository contains a Django backend and a React frontend for a hostel mana
 
 ## Contents
 
-- `demo/` - Django settings and configuration
-- `amenities/`, `audit/`, `hostels/`, `integrations/`, `leads/`, `posts/`, `users/` - Django apps
+- `backend/` - Django backend application
 - `frontend/` - React frontend application
 - `manage.py` - Django management script
 

@@ -65,9 +65,7 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'users',
     'hostels',
-    'amenities',
     'posts',
-    'leads',
     'audit',
     'integrations',
 ]
