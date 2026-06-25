@@ -18,7 +18,7 @@ This repository contains a Django backend and a React frontend for a hostel mana
 
 ## Notes
 
-- The React app is proxied to the backend on `http://localhost:8000`.
+- The React app is proxied to the backend on `http://localhost:8765`.
 - Secret keys and environment variables should be stored in `demo/.env`.
 
 ## Telegram webhook
@@ -29,13 +29,13 @@ Start the backend in one terminal:
 
 ```powershell
 cd C:\Users\user\hostel.kg\backend
-python manage.py runserver 8000
+python manage.py runserver 8765
 ```
 
 Then start ngrok in another terminal:
 
 ```powershell
-ngrok http 8000
+ngrok http 8765
 ```
 
 ngrok will print a public HTTPS URL like `https://abcd-1234.ngrok.io`.
