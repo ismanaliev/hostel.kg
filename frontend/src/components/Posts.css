@@ -121,3 +121,30 @@
   border-radius: 4px;
   margin-top: 1rem;
 }
+
+.post-card-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.bump-btn {
+  border: none;
+  background: #0088cc;
+  color: #fff;
+  font-weight: 600;
+  padding: 0.4rem 0.8rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.bump-btn:hover {
+  background: #0077b3;
+}
+
+.delete-post-btn {
+  border: none;
+  background: transparent;
+  font-size: 1.1rem;
+  cursor: pointer;
+}

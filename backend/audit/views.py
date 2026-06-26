@@ -34,6 +34,7 @@ class VerificationVisitViewSet(viewsets.ModelViewSet):
         try:
             hostel = verification_visit.hostel
             hostel.status = 'active'
+            hostel.is_verified = True
             hostel.save()
             verification_visit.is_approved = True
             verification_visit.save()

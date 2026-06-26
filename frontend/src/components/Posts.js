@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { roomTypeLabel, formatPrice } from './listingUtils';
 import './Posts.css';
+
+const ROOM_TYPES = [
+  { value: 'bed', label: 'Bed in shared room' },
+  { value: 'room', label: 'Private room' },
+  { value: 'apartment', label: 'Apartment' },
+  { value: 'other', label: 'Other' },
+];
 
 function Posts({ token, user }) {
   const [posts, setPosts] = useState([]);
@@ -7,13 +15,12 @@ function Posts({ token, user }) {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [sortBy, setSortBy] = useState('newest');
   const [newPost, setNewPost] = useState({
     content: '',
+    price: '',
+    room_type: 'bed',
     image: null,
-    hostel: ''
   });
-  const [hostels, setHostels] = useState([]);
   const [imagePreview, setImagePreview] = useState(null);
 
   const fetchPosts = useCallback(async () => {
@@ -26,11 +33,10 @@ function Posts({ token, user }) {
       });
       if (response.ok) {
         const data = await response.json();
-        const postsArray = Array.isArray(data) ? data : data.results || [];
-        setPosts(postsArray);
+        setPosts(Array.isArray(data) ? data : data.results || []);
         setError(null);
       } else {
-        setError('Failed to fetch posts');
+        setError('Failed to fetch listings');
       }
     } catch (err) {
       setError('Network error: ' + err.message);
@@ -39,46 +45,25 @@ function Posts({ token, user }) {
     }
   }, [token]);
 
-  const fetchHostels = useCallback(async () => {
-    try {
-      const response = await fetch('/api/hostels/', {
-        headers: {
-          'Authorization': `Token ${token}`
-        }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        const hostelsArray = Array.isArray(data) ? data : data.results || [];
-        setHostels(hostelsArray);
-      }
-    } catch (err) {
-      console.error('Failed to fetch hostels:', err);
-    }
-  }, [token]);
-
   useEffect(() => {
     if (token) {
       fetchPosts();
-      fetchHostels();
     }
-  }, [token, fetchPosts, fetchHostels]);
+  }, [token, fetchPosts]);
 
   const handleCreatePost = async (e) => {
     e.preventDefault();
-    
+
     if (!newPost.content.trim()) {
-      setError('Post content cannot be empty');
+      setError('Listing description cannot be empty');
       return;
     }
 
     const formData = new FormData();
     formData.append('content', newPost.content);
-    if (newPost.image) {
-      formData.append('image', newPost.image);
-    }
-    if (newPost.hostel) {
-      formData.append('hostel', newPost.hostel);
-    }
+    if (newPost.price) formData.append('price', newPost.price);
+    if (newPost.room_type) formData.append('room_type', newPost.room_type);
+    if (newPost.image) formData.append('image', newPost.image);
 
     try {
       const response = await fetch('/api/posts/', {
@@ -92,15 +77,15 @@ function Posts({ token, user }) {
       if (response.ok) {
         const createdPost = await response.json();
         setPosts([createdPost, ...posts]);
-        setNewPost({ content: '', image: null, hostel: '' });
+        setNewPost({ content: '', price: '', room_type: 'bed', image: null });
         setImagePreview(null);
         setShowCreateForm(false);
         setError(null);
-        setSuccess('Post created successfully!');
+        setSuccess('Listing created successfully!');
         setTimeout(() => setSuccess(null), 3000);
       } else {
         const errorData = await response.json();
-        setError(errorData.detail || 'Failed to create post');
+        setError(errorData.detail || 'Failed to create listing');
       }
     } catch (err) {
       setError('Network error: ' + err.message);
@@ -112,15 +97,34 @@ function Posts({ token, user }) {
     if (file) {
       setNewPost({ ...newPost, image: file });
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result);
-      };
+      reader.onloadend = () => setImagePreview(reader.result);
       reader.readAsDataURL(file);
     }
   };
 
+  const handleBump = async (postId) => {
+    try {
+      const response = await fetch(`/api/posts/${postId}/bump/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Token ${token}`
+        }
+      });
+      if (response.ok) {
+        const updated = await response.json();
+        setPosts(posts.map(p => (p.id === postId ? updated : p)));
+        setSuccess('Listing bumped to the top!');
+        setTimeout(() => setSuccess(null), 3000);
+      } else {
+        setError('Failed to bump listing');
+      }
+    } catch (err) {
+      setError('Network error: ' + err.message);
+    }
+  };
+
   const handleDeletePost = async (postId) => {
-    if (!window.confirm('Are you sure you want to delete this post?')) {
+    if (!window.confirm('Are you sure you want to delete this listing?')) {
       return;
     }
 
@@ -134,38 +138,37 @@ function Posts({ token, user }) {
 
       if (response.ok) {
         setPosts(posts.filter(p => p.id !== postId));
-        setSuccess('Post deleted successfully!');
+        setSuccess('Listing deleted successfully!');
         setTimeout(() => setSuccess(null), 3000);
       } else {
-        setError('Failed to delete post');
+        setError('Failed to delete listing');
       }
     } catch (err) {
       setError('Network error: ' + err.message);
     }
   };
 
-  const sortedPosts = [...posts].sort((a, b) => {
-    if (sortBy === 'newest') {
-      return new Date(b.created_at) - new Date(a.created_at);
-    } else if (sortBy === 'oldest') {
-      return new Date(a.created_at) - new Date(b.created_at);
-    }
-    return 0;
-  });
-
   if (!token) {
-    return <div className="posts-container">Please login to view posts.</div>;
+    return <div className="posts-container">Please log in as an owner to manage your listings.</div>;
+  }
+
+  if (user && user.role !== 'owner' && user.role !== 'staff') {
+    return (
+      <div className="posts-container">
+        Only hostel owners can manage listings. Register your hostel via the Telegram bot to get started.
+      </div>
+    );
   }
 
   return (
     <div className="posts-container">
       <div className="posts-header">
-        <h1>📝 Posts</h1>
+        <h1>🛏 My Listings</h1>
         <button
           onClick={() => setShowCreateForm(!showCreateForm)}
           className="create-btn"
         >
-          {showCreateForm ? '✕ Cancel' : '+ Create Post'}
+          {showCreateForm ? '✕ Cancel' : '+ New Listing'}
         </button>
       </div>
 
@@ -184,36 +187,43 @@ function Posts({ token, user }) {
 
       {showCreateForm && (
         <form onSubmit={handleCreatePost} className="create-post-form">
-          <h2>Create New Post</h2>
+          <h2>Create New Listing</h2>
           <div className="form-group">
-            <label>Post Content *</label>
+            <label>Description *</label>
             <textarea
-              placeholder="What would you like to share?"
+              placeholder="e.g. Bed in a 6-person mixed dorm, includes breakfast"
               value={newPost.content}
               onChange={(e) => setNewPost({ ...newPost, content: e.target.value })}
               required
-              rows={5}
+              rows={4}
             />
-            <div className="char-count">{newPost.content.length}/1000</div>
           </div>
 
           <div className="form-group">
-            <label>Associated Hostel</label>
+            <label>Price (KGS)</label>
+            <input
+              type="number"
+              min="0"
+              placeholder="e.g. 500"
+              value={newPost.price}
+              onChange={(e) => setNewPost({ ...newPost, price: e.target.value })}
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Room type</label>
             <select
-              value={newPost.hostel}
-              onChange={(e) => setNewPost({ ...newPost, hostel: e.target.value })}
+              value={newPost.room_type}
+              onChange={(e) => setNewPost({ ...newPost, room_type: e.target.value })}
             >
-              <option value="">Select a hostel (optional)</option>
-              {hostels.map(hostel => (
-                <option key={hostel.id} value={hostel.id}>
-                  {hostel.name}
-                </option>
+              {ROOM_TYPES.map(rt => (
+                <option key={rt.value} value={rt.value}>{rt.label}</option>
               ))}
             </select>
           </div>
 
           <div className="form-group">
-            <label>Add Image</label>
+            <label>Photo</label>
             <div className="file-input-wrapper">
               <input
                 type="file"
@@ -242,59 +252,54 @@ function Posts({ token, user }) {
             )}
           </div>
 
-          <button type="submit" className="submit-btn">Post</button>
+          <button type="submit" className="submit-btn">Publish Listing</button>
         </form>
       )}
 
       <div className="posts-controls">
-        <div className="sort-control">
-          <label>Sort by:</label>
-          <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-            <option value="newest">Newest First</option>
-            <option value="oldest">Oldest First</option>
-          </select>
-        </div>
         <button onClick={fetchPosts} className="refresh-btn">↻ Refresh</button>
       </div>
 
       {loading ? (
-        <div className="loading">⏳ Loading posts...</div>
+        <div className="loading">⏳ Loading listings...</div>
       ) : (
         <div className="posts-list">
-          {sortedPosts.length === 0 ? (
+          {posts.length === 0 ? (
             <div className="empty-state">
-              <p>No posts yet. Be the first to post something!</p>
+              <p>You have no listings yet. Create your first one!</p>
             </div>
           ) : (
-            sortedPosts.map(post => (
+            posts.map(post => (
               <div key={post.id} className="post-card">
                 <div className="post-header">
                   <div className="post-title-meta">
-                    <h3>{post.hostel?.name || 'General Post'}</h3>
-                    <span className="post-date">
-                      {new Date(post.created_at).toLocaleDateString()} 
-                      {' '}
-                      {new Date(post.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                    </span>
+                    <h3>
+                      {formatPrice(post.price)}
+                      {post.room_type ? ` · ${roomTypeLabel(post.room_type)}` : ''}
+                    </h3>
+                    <span className="post-date">{post.hostel_name}</span>
                   </div>
-                  {user?.id === post.author?.id && (
+                  <div className="post-card-actions">
+                    <button
+                      onClick={() => handleBump(post.id)}
+                      className="bump-btn"
+                      title="Bump to top"
+                    >
+                      ⬆ Bump
+                    </button>
                     <button
                       onClick={() => handleDeletePost(post.id)}
                       className="delete-post-btn"
-                      title="Delete post"
+                      title="Delete listing"
                     >
                       🗑️
                     </button>
-                  )}
+                  </div>
                 </div>
                 <div className="post-content">
                   <p>{post.content}</p>
                   {post.image && (
-                    <img
-                      src={post.image}
-                      alt="Post"
-                      className="post-image"
-                    />
+                    <img src={post.image} alt="Listing" className="post-image" />
                   )}
                 </div>
               </div>

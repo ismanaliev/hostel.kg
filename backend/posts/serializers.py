@@ -3,21 +3,24 @@ from .models import Post
 
 
 class PostSerializer(serializers.ModelSerializer):
-    """
-    Serializer for Post model with nested hostel and owner information.
-    
-    Read-only fields:
-    - hostel: The hostel ID is assigned automatically from the owner's registered hostel
-    - hostel_name: Name of the hostel
-    - owner_username: Username of the hostel owner
-    - owner_email: Email of the hostel owner
-    - created_at: Timestamp of post creation
+    """Serializer for a listing (Post) with the hostel and owner contact info
+    that the public client feed needs.
+
+    Writable by owners: content, price, room_type, image.
+    Everything derived from the hostel/owner is read-only.
     """
 
     hostel = serializers.PrimaryKeyRelatedField(read_only=True)
     hostel_name = serializers.ReadOnlyField(source='hostel.name')
+    hostel_verified = serializers.ReadOnlyField(source='hostel.is_verified')
+    hostel_category = serializers.ReadOnlyField(source='hostel.category')
+    hostel_address = serializers.ReadOnlyField(source='hostel.address')
+    hostel_latitude = serializers.ReadOnlyField(source='hostel.latitude')
+    hostel_longitude = serializers.ReadOnlyField(source='hostel.longitude')
     owner_username = serializers.ReadOnlyField(source='hostel.owner.username')
-    owner_email = serializers.ReadOnlyField(source='hostel.owner.email')
+    owner_telegram_username = serializers.ReadOnlyField(source='hostel.owner.telegram_username')
+    owner_telegram_id = serializers.ReadOnlyField(source='hostel.owner.telegram_id')
+    owner_phone = serializers.ReadOnlyField(source='hostel.owner.phone_number')
 
     class Meta:
         model = Post
@@ -25,11 +28,38 @@ class PostSerializer(serializers.ModelSerializer):
             'id',
             'hostel',
             'hostel_name',
+            'hostel_verified',
+            'hostel_category',
+            'hostel_address',
+            'hostel_latitude',
+            'hostel_longitude',
             'owner_username',
-            'owner_email',
+            'owner_telegram_username',
+            'owner_telegram_id',
+            'owner_phone',
             'content',
+            'price',
+            'room_type',
             'image',
+            'is_featured',
+            'bumped_at',
             'is_active',
-            'created_at'
+            'created_at',
         ]
-        read_only_fields = ['id', 'hostel', 'hostel_name', 'owner_username', 'owner_email', 'created_at']
+        read_only_fields = [
+            'id',
+            'hostel',
+            'hostel_name',
+            'hostel_verified',
+            'hostel_category',
+            'hostel_address',
+            'hostel_latitude',
+            'hostel_longitude',
+            'owner_username',
+            'owner_telegram_username',
+            'owner_telegram_id',
+            'owner_phone',
+            'is_featured',
+            'bumped_at',
+            'created_at',
+        ]
