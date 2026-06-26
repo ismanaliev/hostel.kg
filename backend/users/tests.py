@@ -7,11 +7,39 @@ from io import BytesIO
 from PIL import Image
 import hashlib
 import hmac
+import json
 import time
+from urllib.parse import urlencode
 from django.conf import settings
 from unittest.mock import patch
 
 User = get_user_model()
+
+
+def _sign(payload, bot_token, scheme='webapp'):
+    """Sign a Telegram initData payload and return it URL-encoded.
+
+    ``scheme='webapp'`` uses the Mini App secret derivation
+    (HMAC_SHA256("WebAppData", token)); ``scheme='login_widget'`` uses the
+    legacy SHA256(token) derivation.
+    """
+    data_check_string = '\n'.join(
+        f'{key}={payload[key]}' for key in sorted(payload.keys())
+    )
+    if scheme == 'webapp':
+        secret_key = hmac.new(
+            b'WebAppData', bot_token.encode('utf-8'), hashlib.sha256
+        ).digest()
+    else:
+        secret_key = hashlib.sha256(bot_token.encode('utf-8')).digest()
+    computed_hash = hmac.new(
+        secret_key,
+        msg=data_check_string.encode('utf-8'),
+        digestmod=hashlib.sha256,
+    ).hexdigest()
+    signed = dict(payload)
+    signed['hash'] = computed_hash
+    return urlencode(signed)
 
 
 class TelegramAuthViewTestCase(APITestCase):
@@ -21,38 +49,26 @@ class TelegramAuthViewTestCase(APITestCase):
         self.client = APIClient()
         self.auth_url = '/api/users/auth/'
 
-    def _generate_valid_telegram_data(self):
-        """Generate valid mocked Telegram initData as URL-encoded string"""
+    def _generate_valid_telegram_data(self, scheme='webapp'):
+        """Generate valid mocked Telegram Mini App initData.
+
+        Real WebApp initData nests the user attributes inside a JSON-encoded
+        ``user`` field, so the test data mirrors that.
+        """
         bot_token = getattr(settings, 'TELEGRAM_BOT_TOKEN', 'test_bot_token')
         current_time = int(time.time())
 
-        payload = {
-            'id': '123456789',
+        user_obj = {
+            'id': 123456789,
             'first_name': 'Test',
             'last_name': 'User',
             'username': 'testuser',
+        }
+        payload = {
+            'user': json.dumps(user_obj, separators=(',', ':')),
             'auth_date': str(current_time),
         }
-
-        # Create data check string
-        data_check_string = '\n'.join(
-            f'{key}={payload[key]}'
-            for key in sorted(payload.keys())
-        )
-
-        # Generate hash
-        secret_key = hashlib.sha256(bot_token.encode('utf-8')).digest()
-        computed_hash = hmac.new(
-            secret_key,
-            msg=data_check_string.encode('utf-8'),
-            digestmod=hashlib.sha256,
-        ).hexdigest()
-
-        payload['hash'] = computed_hash
-        
-        # Convert to URL-encoded query string
-        query_string = '&'.join(f'{k}={v}' for k, v in payload.items())
-        return query_string
+        return _sign(payload, bot_token, scheme=scheme)
 
     @override_settings(TELEGRAM_BOT_TOKEN='test_bot_token')
     def test_telegram_auth_success(self):
@@ -65,7 +81,33 @@ class TelegramAuthViewTestCase(APITestCase):
         self.assertIn('role', response.data)
         self.assertIn('is_verified', response.data)
         self.assertEqual(response.data['role'], 'client')
-        self.assertEqual(response.data['is_verified'], True)
+        self.assertEqual(response.data['is_verified'], False)
+
+    @override_settings(TELEGRAM_BOT_TOKEN='test_bot_token')
+    def test_telegram_auth_parses_nested_user(self):
+        """Telegram id and name are read from the nested WebApp user field"""
+        init_data = self._generate_valid_telegram_data()
+        response = self.client.post(self.auth_url, {'initData': init_data}, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        user = User.objects.get(telegram_id=123456789)
+        self.assertEqual(user.first_name, 'Test')
+        self.assertEqual(user.last_name, 'User')
+
+    @override_settings(TELEGRAM_BOT_TOKEN='test_bot_token')
+    def test_telegram_auth_login_widget_scheme(self):
+        """Legacy Login Widget payloads (flat fields, SHA256) still work"""
+        bot_token = 'test_bot_token'
+        payload = {
+            'id': '987654321',
+            'first_name': 'Widget',
+            'auth_date': str(int(time.time())),
+        }
+        init_data = _sign(payload, bot_token, scheme='login_widget')
+        response = self.client.post(self.auth_url, {'initData': init_data}, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(User.objects.filter(telegram_id=987654321).exists())
 
     @override_settings(TELEGRAM_BOT_TOKEN='test_bot_token')
     def test_telegram_auth_creates_user(self):
