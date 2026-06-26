@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import json
 import time
 import urllib.parse
 
@@ -32,8 +33,9 @@ class TelegramAuthView(APIView):
         payload = self.parse_init_data(init_data)
         self.validate_init_data(payload)
 
-        telegram_id = self.get_telegram_id(payload)
-        user = self.get_or_create_user(payload, telegram_id)
+        user_fields = self.extract_user_fields(payload)
+        telegram_id = self.get_telegram_id(user_fields)
+        user = self.get_or_create_user(user_fields, telegram_id)
         token, _ = Token.objects.get_or_create(user=user)
 
         return Response(
@@ -58,14 +60,55 @@ class TelegramAuthView(APIView):
         return {key: values[0] for key, values in parsed.items()}
 
     @staticmethod
-    def get_telegram_id(payload):
-        telegram_id = payload.get('id') or payload.get('user_id')
+    def extract_user_fields(payload):
+        """Return the Telegram user attributes from initData.
+
+        Mini App (WebApp) initData nests the user attributes in a
+        JSON-encoded ``user`` field, while the Login Widget format places
+        them at the top level. Support both.
+        """
+        user_field = payload.get('user')
+        if user_field:
+            try:
+                user_data = json.loads(user_field)
+            except (TypeError, ValueError) as exc:
+                raise ValidationError('Invalid user field in initData') from exc
+            if not isinstance(user_data, dict):
+                raise ValidationError('Invalid user field in initData')
+            return user_data
+        return payload
+
+    @staticmethod
+    def get_telegram_id(user_fields):
+        telegram_id = user_fields.get('id') or user_fields.get('user_id')
         if telegram_id is None:
             raise ValidationError('Telegram id is missing from initData')
         try:
             return int(telegram_id)
         except (TypeError, ValueError):
             raise ValidationError('Invalid telegram id format')
+
+    @staticmethod
+    def hash_is_valid(data_check_string, received_hash, bot_token):
+        """Verify the initData signature against both Telegram schemes.
+
+        Mini Apps derive the secret as ``HMAC_SHA256("WebAppData", token)``
+        whereas the Login Widget uses ``SHA256(token)``.
+        """
+        webapp_secret = hmac.new(
+            b'WebAppData', bot_token.encode('utf-8'), hashlib.sha256
+        ).digest()
+        login_widget_secret = hashlib.sha256(bot_token.encode('utf-8')).digest()
+
+        for secret_key in (webapp_secret, login_widget_secret):
+            computed_hash = hmac.new(
+                secret_key,
+                msg=data_check_string.encode('utf-8'),
+                digestmod=hashlib.sha256,
+            ).hexdigest()
+            if hmac.compare_digest(computed_hash, received_hash):
+                return True
+        return False
 
     def validate_init_data(self, payload):
         received_hash = payload.pop('hash', None)
@@ -81,14 +124,7 @@ class TelegramAuthView(APIView):
             for key in sorted(payload.keys())
         )
 
-        secret_key = hashlib.sha256(bot_token.encode('utf-8')).digest()
-        computed_hash = hmac.new(
-            secret_key,
-            msg=data_check_string.encode('utf-8'),
-            digestmod=hashlib.sha256,
-        ).hexdigest()
-
-        if not hmac.compare_digest(computed_hash, received_hash):
+        if not self.hash_is_valid(data_check_string, received_hash, bot_token):
             raise ValidationError('Telegram initData hash validation failed')
 
         auth_date = payload.get('auth_date')
@@ -103,9 +139,9 @@ class TelegramAuthView(APIView):
         if abs(time.time() - auth_timestamp) > 86400:
             raise ValidationError('Telegram auth data has expired')
 
-    def make_username(self, payload, telegram_id):
-        base_username = payload.get('username') or payload.get('first_name') or f'telegram_{telegram_id}'
-        username = ''.join(c if c.isalnum() or c == '_' else '_' for c in base_username.lower())
+    def make_username(self, user_fields, telegram_id):
+        base_username = user_fields.get('username') or user_fields.get('first_name') or f'telegram_{telegram_id}'
+        username = ''.join(c if c.isalnum() or c == '_' else '_' for c in str(base_username).lower())
         if not username:
             username = f'telegram_{telegram_id}'
 
@@ -114,19 +150,19 @@ class TelegramAuthView(APIView):
 
         return username
 
-    def get_or_create_user(self, payload, telegram_id):
+    def get_or_create_user(self, user_fields, telegram_id):
         try:
             return User.objects.get(telegram_id=telegram_id)
         except User.DoesNotExist:
-            username = self.make_username(payload, telegram_id)
+            username = self.make_username(user_fields, telegram_id)
             user = User.objects.create(
                 username=username,
                 telegram_id=telegram_id,
-                first_name=payload.get('first_name', ''),
-                last_name=payload.get('last_name', ''),
-                email=payload.get('email', ''),
+                first_name=user_fields.get('first_name', ''),
+                last_name=user_fields.get('last_name', ''),
+                email=user_fields.get('email', ''),
                 role='client',
-                is_verified=True,
+                is_verified=False,
             )
             user.set_unusable_password()
             user.save()
