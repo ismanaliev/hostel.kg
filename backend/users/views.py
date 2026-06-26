@@ -151,13 +151,19 @@ class TelegramAuthView(APIView):
         return username
 
     def get_or_create_user(self, user_fields, telegram_id):
+        telegram_username = user_fields.get('username', '') or ''
         try:
-            return User.objects.get(telegram_id=telegram_id)
+            user = User.objects.get(telegram_id=telegram_id)
+            if telegram_username and user.telegram_username != telegram_username:
+                user.telegram_username = telegram_username
+                user.save(update_fields=['telegram_username'])
+            return user
         except User.DoesNotExist:
             username = self.make_username(user_fields, telegram_id)
             user = User.objects.create(
                 username=username,
                 telegram_id=telegram_id,
+                telegram_username=telegram_username,
                 first_name=user_fields.get('first_name', ''),
                 last_name=user_fields.get('last_name', ''),
                 email=user_fields.get('email', ''),

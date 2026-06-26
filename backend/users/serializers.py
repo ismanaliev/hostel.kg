@@ -26,9 +26,10 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'is_verified',
             'application_status',
             'telegram_id',
+            'telegram_username',
             'hostels',
         ]
-        read_only_fields = ['id', 'username', 'role', 'is_verified', 'telegram_id', 'hostels', 'application_status']
+        read_only_fields = ['id', 'username', 'role', 'is_verified', 'telegram_id', 'telegram_username', 'hostels', 'application_status']
 
 
 class UserUpdateSerializer(serializers.ModelSerializer):

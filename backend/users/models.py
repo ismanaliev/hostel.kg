@@ -14,6 +14,7 @@ class User(AbstractUser):
         ('rejected', 'Rejected'),
     )
     telegram_id = models.BigIntegerField(unique=True, null=True, blank=True)
+    telegram_username = models.CharField(max_length=64, blank=True)
     phone_number = models.CharField(max_length=20, blank=True)
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='client')
     is_verified = models.BooleanField(default=False)
